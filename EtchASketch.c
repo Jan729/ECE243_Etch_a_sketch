@@ -14,24 +14,16 @@ int main(void)
 
     //initialize key and switch data registers
 
-    //...
+    volatile int* key_data_reg = (int*)0xFF200050;
 
     //declare your other variables here
-    //...
-    int xPos = 150, yPos = 120;
+    int up_down_keys = 0, left_rt_keys = 0, pixel_inc = 1;
+    int x_pos = 150, y_pos = 120;
     short int colour = 0xFFFF;
-    
 
-    /* set front pixel buffer to start of FPGA On-chip memory */
-    *(pixel_ctrl_ptr + 1) = 0xC8000000; // first store the address in the 
-                                        // back buffer
-    /* now, swap the front/back buffers, to set the front buffer location */
-    //on cpulator, both buffers initially set to 0xC0000000 (SDRAM)
-    wait_for_vsync();
-    /* initialize a pointer to the pixel buffer, used by drawing functions */
-    pixel_buffer_start = *pixel_ctrl_ptr;
-    clear_screen(); // pixel_buffer_start points to the pixel buffer
-
+    /* set front pixel buffer to a different address than back buffer */
+    *(pixel_ctrl_ptr + 1) = 0xC8000000; // first store the address in the back buffer
+    wait_for_vsync(); //swap buffers
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen();
 
@@ -39,7 +31,31 @@ int main(void)
     {
         //poll keys. Increment pixel position
 
-        //...
+        int key_data = *key_data_reg;
+        up_down_keys = key_data & 12; //keys[3:2]
+        left_rt_keys = key_data & 3; //keys[1:0]
+
+        //increment y position
+        switch (up_down_keys) {
+        case 4:
+            y_pos += pixel_inc; //key 2 pressed. go down
+            break;
+        case 8:
+            y_pos -= pixel_inc; //key 3 pressed. go up
+            break;
+        default:;//do nothing
+        }
+
+        //increment x position
+        switch (left_rt_keys) {
+        case 1:
+            x_pos += pixel_inc; //key 2 pressed. go down
+            break;
+        case 2:
+            x_pos -= pixel_inc; //key 3 pressed. go up
+            break;
+        default:;//do nothing
+        }
 
         //poll switches
 
@@ -54,7 +70,7 @@ int main(void)
         //...
 
         //draw the pixel
-        plot_pixel(xPos, yPos, colour);
+        plot_pixel(x_pos, y_pos, colour);
 
         wait_for_vsync(); // swap front and back buffers on VGA vertical sync
     }
@@ -81,5 +97,4 @@ void wait_for_vsync() {
 
     while ((status & (int)0x01) != 0) //wait until video out has finished rendering
         status = *(pixel_ctrl_ptr + 3);
-
 }
