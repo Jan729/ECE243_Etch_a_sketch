@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdbool.h>
+#include <time.h>
 
 volatile int pixel_buffer_start; // global variable
 
@@ -27,7 +28,7 @@ int main(void)
     bool idle = false, blink_on = true;
 
     //set up interval timer. If user idle, change pixel 
-    //colour to make it 'blink' every 0.5 secs
+    //colour every time the timer reaches zero to make it 'blink'
     volatile int* priv_timer_ld = (int*)0xFFFEC600; //interval timer
     volatile int* priv_timer_val = priv_timer_ld + 1;
     volatile int* priv_timer_ctrl = priv_timer_ld + 2;
@@ -67,11 +68,6 @@ int main(void)
         colour = pixel_color(SW0, SW1, SW2);
         save_colour = colour; //save colour in case we're blinking the pixel
 
-        //if switch 9 ON, clear screen
-
-		if(SW9)
-			clear_screen();
-
         //if keys aren't being pressed, measure inactive time with private timer
         if (((key_data & 0xFFFF) == 0) && (!idle)) {
             idle = true;
@@ -91,6 +87,8 @@ int main(void)
                 colour = save_colour;
                 blink_on = false;
             }
+        } else {
+            colour = save_colour;
         }
 
         //increment y position
@@ -114,15 +112,23 @@ int main(void)
             break;
         default:;//do nothing
         }
-
-        //for debugging, write blink_on signal to LEDR0
-        volatile int* ledr = (int*)0xFF200000;
-        *ledr = idle;
         
-        //draw the pixel
-        plot_pixel(x_pos, y_pos, colour);
-
+        //measure the time it takes vsync to execute. need to know if we're gonna merge audio
+        /*clock_t t = clock();
         wait_for_vsync(); // swap front and back buffers on VGA vertical sync
+        t = clock() - t;
+        double elapsed_time = ((double)t) / CLOCKS_PER_SEC;
+        printf("Vsync took %f secs\n", elapsed_time); */
+
+        //if switch 9 ON, clear screen. otherwise, draw the pixel
+        //Note: if SW9 is on, user can still change the position and colour of the pixel
+        //but they won't see the pixel until SW9 is off
+        if (SW9)
+            clear_screen();
+        else
+            plot_pixel(x_pos, y_pos, colour);
+
+        wait_for_vsync();
     }
 }
 
