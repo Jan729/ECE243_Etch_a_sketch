@@ -12,51 +12,41 @@ short int pixel_color (int r, int g, int b);
 int main(void)
 {
     volatile int* pixel_ctrl_ptr = (int*)0xFF203020;
-
-    //initialize key and switch data registers
-
     volatile int* key_data_reg = (int*)0xFF200050;
 
-    //declare your other variables here
     int up_down_keys = 0, left_rt_keys = 0, pixel_inc = 1;
     int x_pos = 150, y_pos = 120;
+
 	int SW0 = 0, SW1 = 0, SW2 = 0, SW3 = 0, SW4 = 0, SW5 = 0, SW6 = 0, SW7 = 0, SW8 = 0, SW9 = 0; 
 	volatile int* switch_data_reg = (int*)0xFF200040;
+
+    int ld_val = 200000000;
+    short int colour = 0xFFFF;
+    short int save_colour = 0xFFFF;
+    short int blink_colour = 0xFFFF;
+    bool idle = false, blink_on = true;
+
+    //set up interval timer. If user idle, change pixel 
+    //colour to make it 'blink' every 0.5 secs
+    volatile int* priv_timer_ld = (int*)0xFFFEC600; //interval timer
+    volatile int* priv_timer_val = priv_timer_ld + 1;
+    volatile int* priv_timer_ctrl = priv_timer_ld + 2;
+
+    *priv_timer_ld = ld_val;
 
     /* set front pixel buffer to a different address than back buffer */
     *(pixel_ctrl_ptr + 1) = 0xC8000000; // first store the address in the back buffer
     wait_for_vsync(); //swap buffers
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen();
-    while (1)
-    {
-        //poll keys. Increment pixel position
 
+    while (true)
+    {
+        //poll keys. Increment pixel position accordingly
+        
         int key_data = *key_data_reg;
         up_down_keys = key_data & 12; //keys[3:2]
         left_rt_keys = key_data & 3; //keys[1:0]
-
-        //increment y position
-        switch (up_down_keys) {
-        case 4:
-            y_pos += pixel_inc; //key 2 pressed. go down
-            break;
-        case 8:
-            y_pos -= pixel_inc; //key 3 pressed. go up
-            break;
-        default:;//do nothing
-        }
-
-        //increment x position
-        switch (left_rt_keys) {
-        case 1:
-            x_pos += pixel_inc; //key 2 pressed. go down
-            break;
-        case 2:
-            x_pos -= pixel_inc; //key 3 pressed. go up
-            break;
-        default:;//do nothing
-        }
 
         //poll switches
 
@@ -74,15 +64,63 @@ int main(void)
 
         //change colour based on switches 8-0
 
-        short int color = pixel_color (SW0, SW1, SW2);
+        colour = pixel_color(SW0, SW1, SW2);
+        save_colour = colour; //save colour in case we're blinking the pixel
 
         //if switch 9 ON, clear screen
 
 		if(SW9)
 			clear_screen();
 
+        //if keys aren't being pressed, measure inactive time with private timer
+        if (((key_data & 0xFFFF) == 0) && (!idle)) {
+            idle = true;
+            *priv_timer_ctrl = 3; //start timer with auto reload
+        } else if ((key_data & 0xFFFF) != 0) {
+            idle = false;
+            *priv_timer_ctrl = 0; //stop timers
+        }
+
+        //change colour of blinking pixel 
+        if (idle) {
+            if ((*priv_timer_val) > (ld_val/2)) {
+                colour = (colour == blink_colour) ? 0 : blink_colour; //use black if colour is same as blink_colour
+                blink_on = true;
+            }
+            else {
+                colour = save_colour;
+                blink_on = false;
+            }
+        }
+
+        //increment y position
+        switch (up_down_keys) {
+        case 4:
+            y_pos += (y_pos == 239) ? y_pos : pixel_inc; //key 2 pressed. go down. stop at bottom of screen.
+            break;
+        case 8:
+            y_pos -= (y_pos == 0) ? y_pos : pixel_inc; //key 3 pressed. go up. stop at top of screen.
+            break;
+        default:;//do nothing
+        }
+
+        //increment x position
+        switch (left_rt_keys) {
+        case 1:
+            x_pos += (x_pos == 319) ? x_pos : pixel_inc; //key 0 pressed. go right
+            break;
+        case 2:
+            x_pos -= (x_pos == 0) ? x_pos : pixel_inc; //key 1 pressed. go left
+            break;
+        default:;//do nothing
+        }
+
+        //for debugging, write blink_on signal to LEDR0
+        volatile int* ledr = (int*)0xFF200000;
+        *ledr = idle;
+        
         //draw the pixel
-        plot_pixel(x_pos, y_pos, color);
+        plot_pixel(x_pos, y_pos, colour);
 
         wait_for_vsync(); // swap front and back buffers on VGA vertical sync
     }
