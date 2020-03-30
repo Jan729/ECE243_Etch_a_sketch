@@ -72,9 +72,14 @@ int main(void)
 		SW8 = switch_data & 0b0100000000;
 		SW9 = switch_data & 0b1000000000;
 
-        //change colour based on switches 8-0
-        
-        colour = pixel_color(SW0, SW1, SW2);
+        //change colour based on switches 8-0 
+		//tried to change how the switches were passed in the function, so that we can keep a track of what color was used(did not work) - gave errors
+		//so depending on the combination of switches, we randomly select the color % for r, g and b, which is then passed to the pixel_color function
+		
+        int b = switch_data & 0b111;
+		int g = switch_data & 0b111000;
+		int g = switch_data & 0b111000000;
+        colour = pixel_color(r, g, b);
         save_colour = colour; //save colour in case we're blinking the pixel
 
         //if keys aren't being pressed, measure inactive time with private timer
@@ -127,7 +132,7 @@ int main(void)
     }
 }
 
-short int pixel_color (int r, int g, int b) { //3 bit color setup......just for initial testing
+short int pixel_color (int r, int g, int b) { 
     return ((r<<10) + (g<<4) + b);
 }
 
