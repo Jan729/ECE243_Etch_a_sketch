@@ -141,13 +141,13 @@ void clear_screen() {
             plot_pixel(x, y, 0x0000);
 }
 
+//while waiting for video out to finish drawing to VGA,
+//keep reading keyboard data to prevent the ps2 read buffer from overflowing
 void wait_for_vsync(int* keyboard_data_ptr) {
     volatile int* pixel_ctrl_ptr = (int*)0xFF203020;
     volatile int* PS2_ptr = (int*)0xFF200100;
     char byte1 = 0, byte2 = 0, byte3 = 0;
-    int start_key = 0xE0;
     int break_key = 0xF0;
-    int up = 0x75, down = 0x72, lt = 0x6B, rt = 0x74;
     int PS2_data;
     int RVALID;
 
