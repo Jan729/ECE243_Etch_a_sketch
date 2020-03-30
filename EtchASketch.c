@@ -72,7 +72,7 @@ int main(void)
 		
         int b = switch_data & 0b111;
 		int g = switch_data & 0b111000;
-		int g = switch_data & 0b111000000;
+		int r = switch_data & 0b111000000;
         colour = pixel_color(r, g, b);
         save_colour = colour; //save colour in case we're blinking the pixel
 
