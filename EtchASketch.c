@@ -7,6 +7,7 @@ volatile int pixel_buffer_start;
 
 //function prototypes
 void plot_pixel(int x, int y, short int line_color);
+void plot_bigger_pixel(int x, int y, int colour, int px_size);
 void clear_screen();
 void wait_for_vsync(int * keyboard_data_ptr); //also polls keyboard while waiting
 short int pixel_color (int r, int g, int b);
@@ -24,6 +25,9 @@ int main(void)
 
     //int up_down_keys = 0, left_rt_keys = 0;
     int pixel_inc = 1;
+    int px_size = 2;
+    int y_max = 240;
+    int x_max = 320;
     int x_pos = 150, y_pos = 120;
 
 	int SW0 = 0, SW1 = 0, SW2 = 0, SW3 = 0, SW4 = 0, SW5 = 0, SW6 = 0, SW7 = 0, SW8 = 0, SW9 = 0; 
@@ -103,7 +107,7 @@ int main(void)
         } else if (keyboard_data != 0xF0) {
             idle = false;
             *priv_timer_ctrl = 0; //stop timer
-            plot_pixel(x_pos, y_pos, save_colour); //overwrite 'blinked' colour before continuing
+            plot_bigger_pixel(x_pos, y_pos, save_colour, px_size); //overwrite 'blinked' colour before continuing
         }
 
         //increment position
@@ -113,13 +117,13 @@ int main(void)
             y_pos -= (y_pos == 0) ? y_pos : pixel_inc; //go up. stop at top of screen.
             break;
         case 0x72: //down
-            y_pos += (y_pos == 239) ? y_pos : pixel_inc; //go down. stop at bottom of screen.
+            y_pos += (y_pos + px_size == y_max) ? y_pos : pixel_inc; //go down. stop at bottom of screen.
             break;
         case 0x6B: //left
             x_pos -= (x_pos == 0) ? x_pos : pixel_inc; //go left. stop at edge of screen
             break;
         case 0x74: //right
-            x_pos += (x_pos == 319) ? x_pos : pixel_inc; //go right. stop at edge of screen
+            x_pos += (x_pos + px_size == x_max) ? x_pos : pixel_inc; //go right. stop at edge of screen
             break;
         default:; //do nothing
         }
@@ -134,9 +138,15 @@ int main(void)
         }
 	bool check;
 	
-
 //trace check not ready
-        plot_pixel(x_pos, y_pos, colour);
+        //if switch 9 ON, clear screen. otherwise, draw the pixel
+        //Note: if SW9 is on, user can still change the position and colour of the pixel
+        //but they won't see the pixel until SW9 is off
+        if (SW9)
+            clear_screen();
+        else
+            plot_bigger_pixel(x_pos, y_pos, colour, px_size);
+
         wait_for_vsync(&keyboard_data);
     }
 	//print game-over / win depending on trace_check
@@ -150,6 +160,13 @@ short int pixel_color (int r, int g, int b) {
 void plot_pixel(int x, int y, short int line_color)
 {
     *(short int*)(pixel_buffer_start + (y << 10) + (x << 1)) = line_color;
+}
+
+void plot_bigger_pixel(int x, int y, int colour, int px_size) {
+    for (int x_pos = x; x_pos < x + px_size; x_pos++)
+        for (int y_pos = y; y_pos < y + px_size; y_pos++)
+            plot_pixel(x_pos, y_pos, colour);
+    
 }
 
 //draw black pixels to clear the entire screen
