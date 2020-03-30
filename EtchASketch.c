@@ -2,25 +2,38 @@
 #include <stdbool.h>
 #include <time.h>
 
-volatile int pixel_buffer_start; // global variable
+// global variables
+volatile int pixel_buffer_start; 
+volatile int* PS2_ptr = (int*)0xFF200100;
 
 //function prototypes
 void plot_pixel(int x, int y, short int line_color);
 void clear_screen();
-void wait_for_vsync();
+void wait_for_vsync(char *b1, char *b2, char *b3); //also polls keyboard while waiting
 short int pixel_color (int r, int g, int b);
+void HEX_PS2(char, char, char);
 
 int main(void)
 {
-    volatile int* pixel_ctrl_ptr = (int*)0xFF203020;
-    volatile int* key_data_reg = (int*)0xFF200050;
+    //key, switch, ps2, VGA variables
 
-    int up_down_keys = 0, left_rt_keys = 0, pixel_inc = 1;
+    volatile int* pixel_ctrl_ptr = (int*)0xFF203020;
+    //volatile int* key_data_reg = (int*)0xFF200050;
+
+    int PS2_data, RVALID;
+    char byte1 = 0, byte2 = 0, byte3 = 0;
+
+   // int key_data;
+    int keyboard_data;
+
+    //int up_down_keys = 0, left_rt_keys = 0;
+    int pixel_inc = 1;
     int x_pos = 150, y_pos = 120;
 
 	int SW0 = 0, SW1 = 0, SW2 = 0, SW3 = 0, SW4 = 0, SW5 = 0, SW6 = 0, SW7 = 0, SW8 = 0, SW9 = 0; 
 	volatile int* switch_data_reg = (int*)0xFF200040;
 
+    //timer and blinking cursor variables
     int ld_val = 200000000;
     short int colour = 0xFFFF;
     short int save_colour = 0xFFFF;
@@ -37,17 +50,13 @@ int main(void)
 
     /* set front pixel buffer to a different address than back buffer */
     *(pixel_ctrl_ptr + 1) = 0xC8000000; // first store the address in the back buffer
-    wait_for_vsync(); //swap buffers
+    wait_for_vsync(&byte1, &byte2, &byte3); //swap buffers
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen();
 
     while (true)
     {
-        //poll keys. Increment pixel position accordingly
-        
-        int key_data = *key_data_reg;
-        up_down_keys = key_data & 12; //keys[3:2]
-        left_rt_keys = key_data & 3; //keys[1:0]
+        keyboard_data = (byte2 != 0xF0) ? byte3 : 0xF0; //if the key was released, DON'T save keycode
 
         //poll switches
 
@@ -64,22 +73,39 @@ int main(void)
 		SW9 = switch_data & 0b1000000000;
 
         //change colour based on switches 8-0
-
+        
         colour = pixel_color(SW0, SW1, SW2);
         save_colour = colour; //save colour in case we're blinking the pixel
 
         //if keys aren't being pressed, measure inactive time with private timer
-        if (((key_data & 0xFFFF) == 0) && (!idle)) {
+        if ((keyboard_data == 0xF0) && (!idle)) {
             idle = true;
             *priv_timer_ctrl = 3; //start timer with auto reload
-        } else if ((key_data & 0xFFFF) != 0) {
+        } else if (keyboard_data != 0xF0) {
             idle = false;
             *priv_timer_ctrl = 0; //stop timers
         }
 
+        //increment position
+        switch (keyboard_data) {
+        case 0x75:
+            y_pos -= (y_pos == 0) ? y_pos : pixel_inc; //go up. stop at top of screen.
+            break;
+        case 0x72: //down
+            y_pos += (y_pos == 239) ? y_pos : pixel_inc; //go down. stop at bottom of screen.
+            break;
+        case 0x6B: //left
+            x_pos -= (x_pos == 0) ? x_pos : pixel_inc; //go left. stop at edge of screen
+            break;
+        case 0x74: //right
+            x_pos += (x_pos == 319) ? x_pos : pixel_inc; //go right. stop at edge of screen
+            break;
+        default:; //do nothing
+        }
+
         //change colour of blinking pixel 
         if (idle) {
-            if ((*priv_timer_val) > (ld_val/2)) {
+            if ((*priv_timer_val) > (ld_val / 2)) {
                 colour = (colour == blink_colour) ? 0 : blink_colour; //use black if colour is same as blink_colour
                 blink_on = true;
             }
@@ -87,38 +113,7 @@ int main(void)
                 colour = save_colour;
                 blink_on = false;
             }
-        } else {
-            colour = save_colour;
         }
-
-        //increment y position
-        switch (up_down_keys) {
-        case 4:
-            y_pos += (y_pos == 239) ? y_pos : pixel_inc; //key 2 pressed. go down. stop at bottom of screen.
-            break;
-        case 8:
-            y_pos -= (y_pos == 0) ? y_pos : pixel_inc; //key 3 pressed. go up. stop at top of screen.
-            break;
-        default:;//do nothing
-        }
-
-        //increment x position
-        switch (left_rt_keys) {
-        case 1:
-            x_pos += (x_pos == 319) ? x_pos : pixel_inc; //key 0 pressed. go right
-            break;
-        case 2:
-            x_pos -= (x_pos == 0) ? x_pos : pixel_inc; //key 1 pressed. go left
-            break;
-        default:;//do nothing
-        }
-        
-        //measure the time it takes vsync to execute. need to know if we're gonna merge audio
-        /*clock_t t = clock();
-        wait_for_vsync(); // swap front and back buffers on VGA vertical sync
-        t = clock() - t;
-        double elapsed_time = ((double)t) / CLOCKS_PER_SEC;
-        printf("Vsync took %f secs\n", elapsed_time); */
 
         //if switch 9 ON, clear screen. otherwise, draw the pixel
         //Note: if SW9 is on, user can still change the position and colour of the pixel
@@ -128,7 +123,7 @@ int main(void)
         else
             plot_pixel(x_pos, y_pos, colour);
 
-        wait_for_vsync();
+        wait_for_vsync(&byte1, &byte2, &byte3);
     }
 }
 
@@ -148,13 +143,47 @@ void clear_screen() {
             plot_pixel(x, y, 0x0000);
 }
 
-void wait_for_vsync() {
+void wait_for_vsync(char * b1, char * b2, char * b3) {
     volatile int* pixel_ctrl_ptr = (int*)0xFF203020;
 
     *(pixel_ctrl_ptr) = 1; //write 1 to reset status flag
 
     int status = *(pixel_ctrl_ptr + 3); //get contents of status register
 
-    while ((status & (int)0x01) != 0) //wait until video out has finished rendering
+    while ((status & (int)0x01) != 0) { //wait until video out has finished rendering
         status = *(pixel_ctrl_ptr + 3);
+        int RVALID = *PS2_ptr & 0x8000; // extract the RVALID field
+        if (RVALID) {
+            /* read from keyboard buffer */
+            *b1 =*b2;
+            *b2 = *b3;
+            *b3 = *PS2_ptr & 0xFF;
+            HEX_PS2(*b1, *b2, *b3);
+        }
+    }
+}
+
+void HEX_PS2(char b1, char b2, char b3) {
+    volatile int* HEX3_HEX0_ptr = (int*)0xFF200020;
+    volatile int* HEX5_HEX4_ptr = (int*)0xFF200030;
+    /* SEVEN_SEGMENT_DECODE_TABLE gives the on/off settings for all segments in
+    * a single 7-seg display in the DE1-SoC Computer, for the hex digits 0 - F
+    */
+    unsigned char seven_seg_decode_table[] = {
+    0x3F, 0x06, 0x5B, 0x4F, 0x66, 0x6D, 0x7D, 0x07,
+    0x7F, 0x67, 0x77, 0x7C, 0x39, 0x5E, 0x79, 0x71 };
+    unsigned char hex_segs[] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+    unsigned int shift_buffer, nibble;
+    unsigned char code;
+    int i;
+    shift_buffer = (b1 << 16) | (b2 << 8) | b3;
+    for (i = 0; i < 6; ++i) {
+        nibble = shift_buffer & 0x0000000F; // character is in rightmost nibble
+        code = seven_seg_decode_table[nibble];
+        hex_segs[i] = code;
+        shift_buffer = shift_buffer >> 4;
+    }
+    /* drive the hex displays */
+    *(HEX3_HEX0_ptr) = *(int*)(hex_segs);
+    *(HEX5_HEX4_ptr) = *(int*)(hex_segs + 4);
 }
