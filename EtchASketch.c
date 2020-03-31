@@ -49,8 +49,10 @@ int main(void)
     wait_for_vsync(&keyboard_data); //swap buffers
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen();
-
-    while (true)
+	int i, j;
+	//checking if user is following trace or not
+	bool trace_check = true;
+    while (trace_check)
     {
         //poll switches
 
@@ -65,16 +67,33 @@ int main(void)
 		SW7 = switch_data & 0b0010000000;
 		SW8 = switch_data & 0b0100000000;
 		SW9 = switch_data & 0b1000000000;
-
+        if (SW9){//keeps repeating if sw9 is 0
+            clear_screen();
+			continue;
+			}//if switch 9 ON, clear screen. otherwise, draw the pixel
         //change colour based on switches 8-0 
 		//tried to change how the switches were passed in the function, so that we can keep a track of what color was used(did not work) - gave errors
 		//so depending on the combination of switches, we randomly select the color % for r, g and b, which is then passed to the pixel_color function
-		
-        int b = switch_data & 0b111;
+				
+		int b = switch_data & 0b111;
 		int g = switch_data & 0b111000;
 		int r = switch_data & 0b111000000;
         colour = pixel_color(r, g, b);
         save_colour = colour; //save colour in case we're blinking the pixel
+
+		//drawing template 
+		//simple square
+
+		for(i = 150; i <= 300; i++ )
+			for(j = 120; j <= 240; j++){
+				if((i == 150) || (i == 300)){
+					plot_pixel(i,j,0xFFFF);
+				}
+				else{
+					plot_pixel(150,j,0xFFFF);
+					plot_pixel(300,j,0xFFFF);
+				}
+			}
 
         //if keys aren't being pressed, measure inactive time with private timer
         if ((keyboard_data == 0xF0) && (!idle)) {
@@ -112,17 +131,16 @@ int main(void)
                 colour = save_colour;
             }
         }
-
-        //if switch 9 ON, clear screen. otherwise, draw the pixel
-        //Note: if SW9 is on, user can still change the position and colour of the pixel
-        //but they won't see the pixel until SW9 is off
-        if (SW9)
-            clear_screen();
-        else
-            plot_pixel(x_pos, y_pos, colour);
+		//trace check
+		if((x_pos != i)||(y_pos != j))
+			trace_check = false;
+        
+        plot_pixel(x_pos, y_pos, colour);
 
         wait_for_vsync(&keyboard_data);
     }
+	//print game-over / win depending on trace_check
+
 }
 
 short int pixel_color (int r, int g, int b) { 
