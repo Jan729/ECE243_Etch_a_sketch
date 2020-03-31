@@ -85,7 +85,7 @@ int main(void)
         if (SW9){//keeps repeating if sw9 is 0
             clear_screen();
 			continue;
-			}//if switch 9 ON, clear screen. otherwise, draw the pixel
+		}//if switch 9 ON, clear screen. otherwise, draw the pixel
         //change colour based on switches 8-0 
 		//tried to change how the switches were passed in the function, so that we can keep a track of what color was used(did not work) - gave errors
 		//so depending on the combination of switches, we randomly select the color % for r, g and b, which is then passed to the pixel_color function
@@ -136,16 +136,10 @@ int main(void)
                 colour = save_colour;
             }
         }
-	bool check;
-	
-//trace check not ready
-        //if switch 9 ON, clear screen. otherwise, draw the pixel
-        //Note: if SW9 is on, user can still change the position and colour of the pixel
-        //but they won't see the pixel until SW9 is off
-        if (SW9)
-            clear_screen();
-        else
-            plot_bigger_pixel(x_pos, y_pos, colour, px_size);
+		bool check;
+		//trace check not ready
+
+        plot_bigger_pixel(x_pos, y_pos, colour, px_size);
 
         wait_for_vsync(&keyboard_data);
     }
