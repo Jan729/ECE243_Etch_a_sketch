@@ -84,17 +84,17 @@ int main(void)
 		//drawing template 
 		//simple square
 
-		for(i = 150; i <= 300; i++ )
-			for(j = 120; j <= 240; j++){
-				if((i == 150) || (i == 300)){
+		for(j = 120; j <= 240; j++){//y
+			for(i = 150; i <= 270; i++){//x
+				if((j == 120) || (j == 270)){
 					plot_pixel(i,j,0xFFFF);
 				}
 				else{
-					plot_pixel(150,j,0xFFFF);
-					plot_pixel(300,j,0xFFFF);
+					plot_pixel(i,120,0xFFFF);
+					plot_pixel(i,270,0xFFFF);
 				}
 			}
-
+		}
         //if keys aren't being pressed, measure inactive time with private timer
         if ((keyboard_data == 0xF0) && (!idle)) {
             idle = true;
@@ -132,11 +132,11 @@ int main(void)
             }
         }
 		//trace check
-		if((x_pos != i)||(y_pos != j))
-			trace_check = false;
-        
-        plot_pixel(x_pos, y_pos, colour);
+		//if((x_pos != i)||(y_pos != j))
+			//trace_check = false;
 
+//trace check not ready
+        plot_pixel(x_pos, y_pos, colour);
         wait_for_vsync(&keyboard_data);
     }
 	//print game-over / win depending on trace_check
