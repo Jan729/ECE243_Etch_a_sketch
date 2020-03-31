@@ -52,6 +52,17 @@ int main(void)
 	int i, j;
 	//checking if user is following trace or not
 	bool trace_check = true;
+	for(j = 120; j <= 230; j++){//y
+		for(i = 150; i <= 260; i++){//x
+			if((j == 120) || (j == 230)){
+				plot_pixel(i,j,0xFFFF);
+			}
+			else{
+				plot_pixel(150,j,0xFFFF);
+				plot_pixel(260,j,0xFFFF);
+			}
+		}
+	}
     while (trace_check)
     {
         //poll switches
@@ -84,17 +95,7 @@ int main(void)
 		//drawing template 
 		//simple square
 
-		for(j = 120; j <= 240; j++){//y
-			for(i = 150; i <= 270; i++){//x
-				if((j == 120) || (j == 270)){
-					plot_pixel(i,j,0xFFFF);
-				}
-				else{
-					plot_pixel(i,120,0xFFFF);
-					plot_pixel(i,270,0xFFFF);
-				}
-			}
-		}
+
         //if keys aren't being pressed, measure inactive time with private timer
         if ((keyboard_data == 0xF0) && (!idle)) {
             idle = true;
@@ -131,9 +132,8 @@ int main(void)
                 colour = save_colour;
             }
         }
-		//trace check
-		//if((x_pos != i)||(y_pos != j))
-			//trace_check = false;
+	bool check;
+	
 
 //trace check not ready
         plot_pixel(x_pos, y_pos, colour);
