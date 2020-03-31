@@ -4,6 +4,9 @@
 
 // global variable
 volatile int pixel_buffer_start; 
+volatile int* priv_timer_ld = (int*)0xFFFEC600; //private timer
+volatile int* HEX3_HEX0_ptr = (int*)0xFF200020;
+volatile int* HEX5_HEX4_ptr = (int*)0xFF200030;
 
 //function prototypes
 void plot_pixel(int x, int y, short int line_color);
@@ -12,15 +15,16 @@ void clear_screen();
 void wait_for_vsync(int * keyboard_data_ptr); //also polls keyboard while waiting
 short int pixel_color (int r, int g, int b);
 void HEX_PS2(char b1, char b2, char b3);
+void disp_hex_msg(bool wonGame);
 
 int main(void)
 {
     //key, switch, ps2, VGA variables
 
     volatile int* pixel_ctrl_ptr = (int*)0xFF203020;
-    //volatile int* key_data_reg = (int*)0xFF200050;
+    volatile int* key_data_reg = (int*)0xFF200050;
 
-   // int key_data;
+    int key_data;
     int keyboard_data;
 
     //int up_down_keys = 0, left_rt_keys = 0;
@@ -39,13 +43,12 @@ int main(void)
     short int save_colour = 0xFFFF;
     short int blink_colour = 0xFFFF;
     bool idle = false;
+    bool wonGame = false;
 
     //set up interval timer. If user idle, change pixel 
     //colour every time the timer reaches zero to make it 'blink'
-    volatile int* priv_timer_ld = (int*)0xFFFEC600; //interval timer
     volatile int* priv_timer_val = priv_timer_ld + 1;
     volatile int* priv_timer_ctrl = priv_timer_ld + 2;
-
     *priv_timer_ld = ld_val;
 
     /* set front pixel buffer to a different address than back buffer */
@@ -54,8 +57,11 @@ int main(void)
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen();
 	int i, j;
+
 	//checking if user is following trace or not
 	bool trace_check = true;
+
+    //draw square
 	for(j = 120; j <= 230; j++){//y
 		for(i = 150; i <= 260; i++){//x
 			if((j == 120) || (j == 230)){
@@ -139,12 +145,26 @@ int main(void)
 		bool check;
 		//trace check not ready
 
+
+        //FOR DEBUGGING ONLY: if key0 pressed, exit loop and display 'congrats' on hexes 
+        //OR if key1 pressed, exit loop and display 'sorry you lose' on hexes 
+        //for your actual win/lose logic, pls set wonGame to true or false so that disp_hex_msg
+        //knows which message to display
+        key_data = *key_data_reg;
+        if ((key_data & 0x1) == 1) {//if key0 pressed down
+            wonGame = true;
+            break;
+        }
+        else if ((key_data & 0x2) == 2) { //if key1 pressed down
+            wonGame = false;
+            break;
+        }
         plot_bigger_pixel(x_pos, y_pos, colour, px_size);
 
         wait_for_vsync(&keyboard_data);
     }
 	//print game-over / win depending on trace_check
-
+    disp_hex_msg(wonGame);
 }
 
 short int pixel_color (int r, int g, int b) { 
@@ -204,8 +224,6 @@ void wait_for_vsync(int* keyboard_data_ptr) {
 }
 
 void HEX_PS2(char b1, char b2, char b3) {
-    volatile int* HEX3_HEX0_ptr = (int*)0xFF200020;
-    volatile int* HEX5_HEX4_ptr = (int*)0xFF200030;
     /* SEVEN_SEGMENT_DECODE_TABLE gives the on/off settings for all segments in
     * a single 7-seg display in the DE1-SoC Computer, for the hex digits 0 - F
     */
@@ -226,4 +244,39 @@ void HEX_PS2(char b1, char b2, char b3) {
     /* drive the hex displays */
     *(HEX3_HEX0_ptr) = *(int*)(hex_segs);
     *(HEX5_HEX4_ptr) = *(int*)(hex_segs + 4);
+}
+
+//endlessly displays a scrolling win or lose message on the hexes
+void disp_hex_msg(bool wonGame) {
+    int timer_ld_val = 50000000;
+    *(priv_timer_ld) = timer_ld_val;
+    *(priv_timer_ld + 2) = 1;
+    unsigned char congrats[14] = {0x39, 0x5C, 0x54, 0x3D, 0x50, 0x77, 0x78, 0x6D, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}; //congrats------
+    unsigned char gameover[20] = {0x6D, 0x5C, 0x50, 0x50, 0x0, 0x6E, 0x5C, 0x3E, 0x0, 0x38, 0x5C, 0x6D, 0x79, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}; //sorry-you-lose------
+    int i = 0;
+    unsigned int HEX0 = 0, HEX1 = 0, HEX2 = 0, HEX3 = 0, HEX4 = 0, HEX5 = 0;
+
+    while (true) {
+        if (*(priv_timer_ld + 1) == 0) {
+            //shift letters to next HEX display
+            HEX5 = HEX4;
+            HEX4 = HEX3;
+            HEX3 = HEX2;
+            HEX2 = HEX1;
+            HEX1 = HEX0;
+            HEX0 = wonGame ? congrats[i] : gameover[i];
+            //assemble bitcodes into the right positions and write to hex display
+            *(HEX3_HEX0_ptr) = ((HEX3 << 24) | (HEX2 << 16)) | ((HEX1 << 8) | HEX0);
+            *(HEX5_HEX4_ptr) = ((HEX5 << 8) | HEX4);
+            //reset timer load value, enable timer, reset flag
+            *(priv_timer_ld) = timer_ld_val;
+            *(priv_timer_ld + 2) = 1;
+            *(priv_timer_ld + 3) = 1;
+            i++;
+        }
+        
+        if ((wonGame && (i >= 14)) || (!wonGame && (i >= 20))){
+            i = 0;
+        }
+    }
 }
