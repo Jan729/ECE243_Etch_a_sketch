@@ -734,6 +734,7 @@ volatile int pixel_buffer_start;
 volatile int* priv_timer_ld = (int*)0xFFFEC600; //private timer
 volatile int* HEX3_HEX0_ptr = (int*)0xFF200020;
 volatile int* HEX5_HEX4_ptr = (int*)0xFF200030;
+#define CURSOR_SPEED 160
 
 //function prototypes
 void plot_pixel(int x, int y, short int line_color);
@@ -757,9 +758,11 @@ int main(void)
     //int up_down_keys = 0, left_rt_keys = 0;
     int pixel_inc = 1;
     int px_size = 2;
-    int y_max = 240;
-    int x_max = 320;
-    int x_pos = 150, y_pos = 120;
+    int x_min = 160;
+    int x_max = 319;
+    int y_min = 0;
+    int y_max = 239;
+    int x_pos = 230, y_pos = 90;
 
 	int SW0 = 0, SW1 = 0, SW2 = 0, SW3 = 0, SW4 = 0, SW5 = 0, SW6 = 0, SW7 = 0, SW8 = 0, SW9 = 0; 
 	volatile int* switch_data_reg = (int*)0xFF200040;
@@ -770,7 +773,8 @@ int main(void)
     short int save_colour = 0xFFFF;
     short int blink_colour = 0xFFFF;
     bool idle = false;
-    bool wonGame = false;
+    bool wonGame = true;
+    bool endGame = false;
 
     //set up interval timer. If user idle, change pixel 
     //colour every time the timer reaches zero to make it 'blink'
@@ -783,14 +787,16 @@ int main(void)
     wait_for_vsync(&keyboard_data); //swap buffers
     pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
     clear_screen();
+
 	//checking if user is following trace or not
 	bool trace_check = true;
+    short int trace[240][160];
+    short int example[240][160];
 
     //draw image from array
     int i = 0, j = 0;
 	//for template
     for (int k = 0; k < 160 * 2 * 240 - 1; k += 2) {
-
 
         int red = ((dino[k + 1] & 0xF8) >> 3) << 11;
         int green = (((dino[k] & 0xE0) >> 5)) | ((dino[k + 1] & 0x7) << 3);
@@ -800,6 +806,7 @@ int main(void)
         short int p = red | ((green << 5) | blue);
 
         plot_pixel(0 + i, j, p);
+        example[i][j] = p;
 
         i += 1;
         if (i == 160) {
@@ -808,7 +815,7 @@ int main(void)
         }
 	}	
 //for trace
-	i = 161;
+	i = 160;
 	j = 0;
     for (int k = 0; k < 160 * 2 * 240 - 1; k += 2) {
 
@@ -821,6 +828,7 @@ int main(void)
         short int p = red | ((green << 5) | blue);
 
         plot_pixel(0 + i, j, p);
+        trace[i - 160][j] = p;
 
         i += 1;
         if (i == 320) {
@@ -828,7 +836,24 @@ int main(void)
             j += 1;
         }
     }
-    while (trace_check)
+
+    keyboard_data = 0xF0; //make pixel blink at start of game
+
+    //FOR DEBUGGING ONLY
+    //Uncomment this to draw a black screen
+    //can use to test if win checking works without actually
+    //drawing the dino perfectly lol
+    /*
+    for (int i = 0; i < 240; i++) {
+        for (int j = 0; j < 160; j++) {
+            example[i][j] = 0;
+            trace[i][j] = 0;
+        }
+    }
+    clear_screen();
+    /*end of test code*/
+
+    while (!endGame)
     {
         //poll switches
 
@@ -866,16 +891,16 @@ int main(void)
         switch (keyboard_data) {
         case 0x75:
             //(template[x_pos][y_pos - 1] == boundary || y_pos == 0) ?
-            y_pos -= (y_pos == 0) ? y_pos : pixel_inc; //go up. stop at top of screen.
+            y_pos -= (y_pos <= y_min) ? 0 : pixel_inc; //go up. stop at top of screen.
             break;
         case 0x72: //down
-            y_pos += (y_pos + px_size == y_max) ? y_pos : pixel_inc; //go down. stop at bottom of screen.
+            y_pos += (y_pos + px_size >= y_max) ? 0 : pixel_inc; //go down. stop at bottom of screen.
             break;
         case 0x6B: //left
-            x_pos -= (x_pos == 0) ? x_pos : pixel_inc; //go left. stop at edge of screen
+            x_pos -= (x_pos <= x_min) ? 0 : pixel_inc; //go left. stop at edge of screen
             break;
         case 0x74: //right
-            x_pos += (x_pos + px_size == x_max) ? x_pos : pixel_inc; //go right. stop at edge of screen
+            x_pos += (x_pos + px_size >= x_max) ? 0 : pixel_inc; //go right. stop at edge of screen
             break;
         default:; //do nothing
         }
@@ -888,28 +913,31 @@ int main(void)
                 colour = save_colour;
             }
         }
-		bool check;
-		//trace check not ready
 
-
-        //FOR DEBUGGING ONLY: if key0 pressed, exit loop and display 'congrats' on hexes 
-        //OR if key1 pressed, exit loop and display 'sorry you lose' on hexes 
-        //for your actual win/lose logic, pls set wonGame to true or false so that disp_hex_msg
-        //knows which message to display
-        key_data = *key_data_reg;
-        if ((key_data & 0x1) == 1) {//if key0 pressed down
-            wonGame = true;
-            break;
-        }
-        else if ((key_data & 0x2) == 2) { //if key1 pressed down
-            wonGame = false;
-            break;
-        }
         plot_bigger_pixel(x_pos, y_pos, colour, px_size);
+
+        //update user's trace
+        for(int x = x_pos; x < x_pos + px_size; x++)
+            for(int y = y_pos; y < y_pos + px_size; y++)
+                trace[x][y] = save_colour;
+
+        //if user pressed enter, check if the drawings match. end the game.
+        wonGame = true;
+        if (keyboard_data == 0x5A) {
+            for (int row = 0; row < 240; row++) {
+                for (int col = 0; col < 160; col++) {
+                    if (example[row][col] != trace[row][col]) {
+                        wonGame = false;
+                    }
+                }
+            }
+            endGame = true;
+        }
 
         wait_for_vsync(&keyboard_data);
     }
-	//print game-over / win depending on trace_check
+
+	//print game-over / win depending on wonGame
     disp_hex_msg(wonGame);
 }
 
@@ -963,6 +991,23 @@ void wait_for_vsync(int* keyboard_data_ptr) {
                 *keyboard_data_ptr = byte3;
             } else
                 *keyboard_data_ptr = break_key;
+        }
+    }
+
+    //stall for a little while because otherwise the cursor moves too fast
+    for (int i = 0; i < CURSOR_SPEED; i++) {
+        PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
+        RVALID = PS2_data & 0x8000; // extract the RVALID field
+        if (RVALID) {
+            /* shift the next data byte into the display */
+            byte1 = byte2;
+            byte2 = byte3;
+            byte3 = PS2_data & 0xFF;
+            if ((byte1 != break_key) && (byte2 != break_key) && (byte3 != break_key)) {
+                *keyboard_data_ptr = byte3;
+            }
+            else
+                *keyboard_data_ptr = break_key;
 
             HEX_PS2(byte1, byte2, byte3);
         }
@@ -998,7 +1043,7 @@ void disp_hex_msg(bool wonGame) {
     *(priv_timer_ld) = timer_ld_val;
     *(priv_timer_ld + 2) = 1;
     unsigned char congrats[14] = {0x39, 0x5C, 0x54, 0x3D, 0x50, 0x77, 0x78, 0x6D, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}; //congrats------
-    unsigned char gameover[20] = {0x6D, 0x5C, 0x50, 0x50, 0x0, 0x6E, 0x5C, 0x3E, 0x0, 0x38, 0x5C, 0x6D, 0x79, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}; //sorry-you-lose------
+    unsigned char gameover[20] = {0x6D, 0x5C, 0x50, 0x50, 0x6E, 0x0, 0x6E, 0x5C, 0x3E, 0x0, 0x38, 0x5C, 0x6D, 0x79, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}; //sorry-you-lose------
     int i = 0;
     unsigned int HEX0 = 0, HEX1 = 0, HEX2 = 0, HEX3 = 0, HEX4 = 0, HEX5 = 0;
 
