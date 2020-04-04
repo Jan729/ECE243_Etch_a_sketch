@@ -544,7 +544,7 @@ int main(void)
 	//checking if user is following trace or not
 	bool trace_check = true;
 
-    //draw square
+    //draw image from array
     int i = 0, j = 0;
 
     for (int k = 0; k < 320 * 2 * 240 - 1; k += 2) {
@@ -585,19 +585,10 @@ int main(void)
             clear_screen();
 			continue;
 		}//if switch 9 ON, clear screen. otherwise, draw the pixel
-        //change colour based on switches 8-0 
-		//tried to change how the switches were passed in the function, so that we can keep a track of what color was used(did not work) - gave errors
-		//so depending on the combination of switches, we randomly select the color % for r, g and b, which is then passed to the pixel_color function
+        //change colour based on switches 2-0 
 				
-		int b = switch_data & 0b111;
-		int g = switch_data & 0b111000;
-		int r = switch_data & 0b111000000;
-        colour = pixel_color(r, g, b);
+        colour = pixel_color(SW0, SW1, SW2);
         save_colour = colour; //save colour in case we're blinking the pixel
-
-		//drawing template 
-		//simple square
-
 
         //if keys aren't being pressed, measure inactive time with private timer
         if ((keyboard_data == 0xF0) && (!idle)) {
