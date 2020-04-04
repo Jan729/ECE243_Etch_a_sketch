@@ -868,13 +868,30 @@ int main(void)
 		SW7 = switch_data & 0b0010000000;
 		SW8 = switch_data & 0b0100000000;
 		SW9 = switch_data & 0b1000000000;
-        if (SW9){//keeps repeating if sw9 is 0
+        
+		if (!(SW9 == 0)){                        //keeps repeating if sw9 is on
             clear_screen();
 			continue;
-		}//if switch 9 ON, clear screen. otherwise, draw the pixel
+		}
+		//if switch 9 ON, clear screen. otherwise, draw the pixel, and update other data
         //change colour based on switches 2-0 
-				
-        colour = pixel_color(SW0, SW1, SW2);
+		if(SW0 == 0 && SW1 == 0 && SW2 == 0)//000
+			colour = 0xFFFF;//white
+		if(SW0 == 1 && SW1 == 2 && SW2 == 4)//111
+			colour = 0x0000;//black
+		if(SW0 == 1 && SW1 == 0 && SW2 == 0)//100
+			colour = 0xF800;//red
+		if(SW0 == 1 && SW1 == 0 && SW2 == 4)//101
+			colour = 0xF81F;//magenta
+		if(SW0 == 0 && SW1 == 2 && SW2 == 0)//010
+			colour = 0x00FF;//green
+		if(SW0 == 0 && SW1 == 0 && SW2 == 4)//001
+			colour =0x001F;//blue
+		if(SW0 == 0 && SW1 == 2 && SW2 == 4)//011
+			colour = 0x07FF;//cyan
+		if(SW0 == 1 && SW1 == 2 && SW2 == 0)//110
+			colour = 0xFFE0;//yellow
+        //colour = pixel_color(SW0, SW1, SW2);
         save_colour = colour; //save colour in case we're blinking the pixel
 
         //if keys aren't being pressed, measure inactive time with private timer
