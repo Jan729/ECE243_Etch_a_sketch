@@ -740,7 +740,7 @@ volatile int* HEX3_HEX0_ptr = (int*)0xFF200020;
 volatile int* HEX5_HEX4_ptr = (int*)0xFF200030;
 volatile int* pixel_ctrl_ptr = (int*)0xFF203020;
 volatile int* PS2_ptr = (int*)0xFF200100;
-#define CURSOR_SPEED 160
+#define CURSOR_DELAY 9999
 #define HEIGHT 240
 #define WIDTH 160
 #define KEY0 1
@@ -791,16 +791,15 @@ int main(void)
 
     //timer and blinking cursor variables
     int ld_val = 250000000;
-    *priv_timer_ld = ld_val;
     short int colour = 0xFFFF;
     short int save_colour = 0xFFFF;
     short int blink_colour = 0xFFFF;
     bool idle = false, wonGame = true, endGame = false, freePlay = false;
 
-    /* set front pixel buffer to a different address than back buffer */
-    *(pixel_ctrl_ptr + 1) = 0xC8000000; // first store the address in the back buffer
-    wait_for_vsync(&keyboard_data); //swap buffers
-    pixel_buffer_start = *(pixel_ctrl_ptr + 1); // we draw on the back buffer
+    /* using single buffering. cursor_delay is already > 1/60th of a sec */
+    *(pixel_ctrl_ptr + 1) = 0xC8000000; 
+    wait_for_vsync(&keyboard_data);
+    pixel_buffer_start = *(pixel_ctrl_ptr + 1);
     clear_screen();
 
     //Save copies of left side and right side of screen. use to check if both sides match
@@ -867,6 +866,7 @@ int main(void)
         //reset variables before starting game
         keyboard_data = 0xF0; //set it to 'break key code' to make pixel blink at start of game
         endGame = false;
+        *priv_timer_ld = ld_val;
 
         while (!endGame)
         {
@@ -895,17 +895,17 @@ int main(void)
                 colour = 0xFFFF;//white
             if (SW0 == 1 && SW1 == 2 && SW2 == 4)//111
                 colour = 0x0000;//black
-            if (SW0 == 1 && SW1 == 0 && SW2 == 0)//100
+            if (SW0 == 0 && SW1 == 0 && SW2 == 4)//100
                 colour = 0xF800;//red
             if (SW0 == 1 && SW1 == 0 && SW2 == 4)//101
                 colour = 0xF81F;//magenta
             if (SW0 == 0 && SW1 == 2 && SW2 == 0)//010
-                colour = 0x00FF;//green
-            if (SW0 == 0 && SW1 == 0 && SW2 == 4)//001
+                colour = 0x07E0;//green
+            if (SW0 == 1 && SW1 == 0 && SW2 == 0)//001
                 colour = 0x001F;//blue
-            if (SW0 == 0 && SW1 == 2 && SW2 == 4)//011
+            if (SW0 == 1 && SW1 == 2 && SW2 == 0)//011
                 colour = 0x07FF;//cyan
-            if (SW0 == 1 && SW1 == 2 && SW2 == 0)//110
+            if (SW0 == 0 && SW1 == 2 && SW2 == 4)//110
                 colour = 0xFFE0;//yellow
             //colour = pixel_color(SW0, SW1, SW2);
             save_colour = colour; //save colour in case we're blinking the pixel
@@ -1013,7 +1013,7 @@ void wait_for_vsync(int* keyboard_data_ptr) {
     int break_key = 0xF0;
     int PS2_data;
     int RVALID;
-
+    /*
     *(pixel_ctrl_ptr) = 1; //write 1 to reset status flag
 
     int status = *(pixel_ctrl_ptr + 3); //get contents of status register
@@ -1023,7 +1023,6 @@ void wait_for_vsync(int* keyboard_data_ptr) {
         PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
         RVALID = PS2_data & 0x8000; // extract the RVALID field
         if (RVALID) {
-            /* shift the next data byte into the display */
             byte1 = byte2;
             byte2 = byte3;
             byte3 = PS2_data & 0xFF;
@@ -1032,14 +1031,14 @@ void wait_for_vsync(int* keyboard_data_ptr) {
             } else
                 *keyboard_data_ptr = break_key;
         }
-    }
+    } */
 
     //stall for a little while because otherwise the cursor moves too fast
-    for (int i = 0; i < CURSOR_SPEED; i++) {
+    for (int i = 0; i < CURSOR_DELAY; i++) {
         PS2_data = *(PS2_ptr); // read the Data register in the PS/2 port
         RVALID = PS2_data & 0x8000; // extract the RVALID field
         if (RVALID) {
-            /* shift the next data byte into the display */
+            //shify key code bytes to make room for new byte
             byte1 = byte2;
             byte2 = byte3;
             byte3 = PS2_data & 0xFF;
@@ -1048,8 +1047,6 @@ void wait_for_vsync(int* keyboard_data_ptr) {
             }
             else
                 *keyboard_data_ptr = break_key;
-
-            HEX_PS2(byte1, byte2, byte3);
         }
     }
 }
